@@ -1,3 +1,2 @@
-mod qasm;
-mod dqasm;
-mod structures;
+pub mod qasm_parser;
+pub mod structures;

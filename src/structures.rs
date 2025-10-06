@@ -1,10 +1,59 @@
 use std::collections::HashSet;
+use std::io;
 
 pub struct Header {
     pub magic: [u8; 4],
-    pub version: u32,
+    pub version: u16,
     pub num_qubits: u32,
     pub num_gates: u64,
+}
+impl Header {
+    pub fn new(num_qubits: u32, num_gates: u64) -> Self {
+        Self {
+            magic: *b"BQM\0",
+            version: 1,
+            num_qubits: num_qubits,
+            num_gates: num_gates,
+        }
+    }
+
+    fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+        writer.write_all(&self.magic)?;
+        writer.write_all(&self.version.to_le_bytes())?;
+        writer.write_all(&self.num_qubits.to_le_bytes())?;
+        writer.write_all(&self.num_gates.to_le_bytes())?;
+        Ok(())
+    }
+
+    fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+        let mut magic = [0u8; 4];
+        reader.read_exact(&mut magic)?;
+        if &magic != b"BQM\0" {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid file magic",
+            ));
+        }
+
+        let mut buf2 = [0u8; 2];
+        reader.read_exact(&mut buf2)?;
+        let version = u16::from_le_bytes(buf2);
+
+        let mut buf4 = [0u8; 4];
+        reader.read_exact(&mut buf4)?;
+        let num_qubits = u32::from_le_bytes(buf4);
+
+        let mut buf8 = [0u8; 8];
+        reader.read_exact(&mut buf8)?;
+        let num_gates = u64::from_le_bytes(buf8);
+
+        Ok(Header {
+            magic,
+            version,
+            num_qubits,
+            num_gates,
+        })
+    }
 }
 
 /// Gate types:
@@ -27,6 +76,7 @@ impl Gate {
             qubit2,
         }
     }
+
     pub fn t(q: u32) -> Self {
         Gate::new(0, q, 0)
     }
@@ -48,6 +98,32 @@ impl Gate {
             true => (self.qubit1, None),
             false => (self.qubit1, Some(self.qubit2)),
         }
+    }
+
+    fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+        writer.write_all(&self.gate_type.to_le_bytes())?;
+        writer.write_all(&self.qubit1.to_le_bytes())?;
+        writer.write_all(&self.qubit2.to_le_bytes())?;
+
+        Ok(())
+    }
+
+    fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+        let mut buf1 = [0u8; 1];
+        reader.read_exact(&mut buf1)?;
+        let gate_type = u8::from_le_bytes(buf1);
+
+        let mut buf4 = [0u8; 4];
+        reader.read_exact(&mut buf4)?;
+        let qubit1 = u32::from_le_bytes(buf4);
+        reader.read_exact(&mut buf4)?;
+        let qubit2 = u32::from_le_bytes(buf4);
+
+        Ok(Self {
+            gate_type,
+            qubit1,
+            qubit2,
+        })
     }
 }
 
@@ -73,5 +149,23 @@ impl Circuit {
             }
         }
         self.gates.push(gate);
+    }
+
+    pub fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+        let header = Header::new(self.qubits.len() as u32, self.gates.len() as u64);
+        header.write(writer)?;
+        self.gates.iter().try_for_each(|g| g.write(writer))?;
+        Ok(())
+    }
+
+    pub fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+        let header = Header::read(reader)?;
+        let mut circuit = Circuit::new();
+        for _ in 0..header.num_qubits {
+            let gate = Gate::read(reader)?;
+            circuit.add_gate(gate);
+        }
+
+        Ok(circuit)
     }
 }

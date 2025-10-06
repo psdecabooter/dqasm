@@ -8,13 +8,13 @@ use std::{
 fn main() -> Result<(), Box<dyn error::Error>> {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() < 2 {
-        println!("Usage: cargo run <path.qasm>");
+    if args.len() < 3 {
+        println!("Usage: cargo run <path.qasm> <out.dqasm>");
         return Ok(());
     }
-    let out_path = "out.dqasm";
-
     let path = &args[1];
+    let out_path = &args[2];
+
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
     let out_file = File::create(out_path)?;

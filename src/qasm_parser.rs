@@ -50,7 +50,8 @@ pub fn parallel_parse_qasm<R: BufRead>(reader: R) -> io::Result<Circuit> {
                 let q0 = caps[3].parse::<u32>().unwrap() + register_groups[&caps[2]];
                 match caps.get(1).unwrap().as_str() {
                     "t" => Some(Gate::t(q0)),
-                    "tdg" => Some(Gate::tdg(q0)),
+                    // "tdg" => Some(Gate::tdg(q0)),
+                    "tdg" => Some(Gate::t(q0)),
                     _ => None,
                 }
             } else {

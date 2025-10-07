@@ -68,6 +68,7 @@ impl Header {
 /// 2: H
 ///
 /// 3: S
+#[derive(Debug)]
 pub struct Gate {
     pub gate_type: u8,
     pub qubit1: u32,
@@ -101,6 +102,14 @@ impl Gate {
         Gate::new(1, q1, q2)
     }
 
+    pub fn h(q: u32) -> Self {
+        Gate::new(2, q, 0)
+    }
+
+    pub fn s(q: u32) -> Self {
+        Gate::new(3, q, 0)
+    }
+
     pub fn is_double_qubit(&self) -> bool {
         self.gate_type == 1
     }
@@ -117,7 +126,9 @@ impl Gate {
         let mut bit_buf = BitBuffer::new();
         bit_buf.write_bits(self.gate_type as u64, Gate::op_bits());
         bit_buf.write_bits(self.qubit1 as u64, qubit_bits);
-        bit_buf.write_bits(self.qubit2 as u64, qubit_bits);
+        if self.is_double_qubit() {
+            bit_buf.write_bits(self.qubit2 as u64, qubit_bits);
+        }
 
         writer.write_all(bit_buf.bytes())?;
 
@@ -125,16 +136,25 @@ impl Gate {
     }
 
     fn read<R: io::Read>(reader: &mut R, num_qubits: u32) -> io::Result<Self> {
-        let qubit_bits = (32 - num_qubits.leading_zeros()) as usize;
-        let byte_size = (qubit_bits * 2 + Gate::op_bits() + 7) / 8;
-        let mut vec_buf = vec![0u8; byte_size];
+        let qubit_bits = (32 - (num_qubits - 1).leading_zeros()) as usize;
+        let mut byte_buf = [0u8; 1];
+        reader.read_exact(&mut byte_buf)?;
+        let mut bit_reader = BitReader::new(Vec::from(byte_buf));
+        let gate_type = bit_reader.read_bits(Gate::op_bits()) as u8;
+        let is_double_qubit = gate_type == 1;
+
+        let remaining_byte_size =
+            (qubit_bits * ((is_double_qubit as usize) + 1) + Gate::op_bits() + 7) / 8 - 1;
+        let mut vec_buf = vec![0u8; remaining_byte_size];
         reader.read_exact(&mut vec_buf)?;
+        bit_reader.append(&mut vec_buf);
 
         // read qubit size
-        let mut bit_buffer = BitReader::new(vec_buf);
-        let gate_type = bit_buffer.read_bits(Gate::op_bits()) as u8;
-        let qubit1 = bit_buffer.read_bits(qubit_bits) as u32;
-        let qubit2 = bit_buffer.read_bits(qubit_bits) as u32;
+        let qubit1 = bit_reader.read_bits(qubit_bits) as u32;
+        let qubit2 = match is_double_qubit {
+            true => bit_reader.read_bits(qubit_bits) as u32,
+            false => 0,
+        };
 
         Ok(Gate {
             gate_type,
@@ -234,6 +254,10 @@ struct BitReader {
 impl BitReader {
     fn new(data: Vec<u8>) -> Self {
         Self { data, bit_pos: 0 }
+    }
+
+    fn append(&mut self, new_data: &mut Vec<u8>) {
+        self.data.append(new_data);
     }
 
     fn read_bits(&mut self, mut bits: usize) -> u64 {

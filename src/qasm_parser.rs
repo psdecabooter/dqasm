@@ -37,7 +37,7 @@ pub fn parallel_parse_qasm<R: BufRead>(reader: R) -> io::Result<Circuit> {
     ))
     .unwrap();
     // Regex for capturing t or tdg gates
-    let t_re = Regex::new(&format!(r"^(t|tdg)\s+({})\[(\d+)\];$", keys)).unwrap();
+    let t_re = Regex::new(&format!(r"^(t|tdg|h|s)\s+({})\[(\d+)\];$", keys)).unwrap();
 
     let gates: Vec<Gate> = gate_lines
         .par_iter()
@@ -52,6 +52,8 @@ pub fn parallel_parse_qasm<R: BufRead>(reader: R) -> io::Result<Circuit> {
                     "t" => Some(Gate::t(q0)),
                     // "tdg" => Some(Gate::tdg(q0)),
                     "tdg" => Some(Gate::t(q0)),
+                    "h" => Some(Gate::h(q0)),
+                    "s" => Some(Gate::s(q0)),
                     _ => None,
                 }
             } else {

@@ -3,6 +3,11 @@ name = "dqasm"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "dqasm"
+crate-type = ["cdylib"]
+
 [dependencies]
 rayon = "1.11.0"
 regex = "1.11.3"
+pyo3 = { version = "0.24", features = ["abi3-py38", "extension-module"] }
